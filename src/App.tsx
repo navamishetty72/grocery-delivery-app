@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { products, categories, categoryEmojis, deals } from './data/products';
+import { categories, categoryEmojis, deals } from './data/products';
 import { Product, CartItem, Category } from './types';
+import AuthModal from './AuthModal';
+import LoginPage from './LoginPage';
 
 interface IconProps {
   className?: string;
@@ -129,6 +131,12 @@ const Icons = {
   Moon: ({ className, style }: IconProps) => (
     <svg className={className} style={style} stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+  ),
+  User: ({ className, style }: IconProps) => (
+    <svg className={className} style={style} stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+      <circle cx="12" cy="7" r="4"></circle>
     </svg>
   )
 };
@@ -350,8 +358,62 @@ function App() {
   const [wishlist, setWishlist] = useState<number[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   
+  // Auth & Backend States
+  const [products, setProducts] = useState<Product[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Fetch products
+  useEffect(() => {
+    fetch('http://localhost:5000/api/products')
+      .then(res => res.json())
+      .then(data => {
+        const mappedProducts = data.map((p: any) => ({
+          ...p,
+          id: p._id,
+          emoji: p.imageUrl,
+          inStock: p.stock > 0,
+          badge: p.stock < 10 ? 'hot' : null
+        }));
+        setProducts(mappedProducts);
+      })
+      .catch(err => console.error(err));
+  }, []);
+
+  // Fetch profile and cart if logged in
+  useEffect(() => {
+    if (token) {
+      fetch('http://localhost:5000/api/auth/profile', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => setUser(data))
+      .catch(() => setToken(null));
+
+      fetch('http://localhost:5000/api/cart', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.items) {
+          setCart(data.items.map((item: any) => ({
+            ...item.product,
+            id: item.product._id,
+            emoji: item.product.imageUrl,
+            quantity: item.quantity,
+            price: item.priceAtAddition || item.product.price
+          })));
+        }
+      });
+    } else {
+      setUser(null);
+      setCart([]);
+    }
+  }, [token]);
+  
   // Sidebar Filters
-  const [maxPrice, setMaxPrice] = useState<number>(200);
+  const [maxPrice, setMaxPrice] = useState<number>(1000);
   const [minRating, setMinRating] = useState<number>(0);
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<string>('All');
@@ -421,36 +483,84 @@ function App() {
   };
 
   // Cart actions
-  const addToCart = (product: Product) => {
+  const addToCart = async (product: Product) => {
     if (!product.inStock) return;
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
-      if (existing) {
-        return prev.map(item => 
-          item.id === product.id 
-            ? { ...item, quantity: item.quantity + 1 } 
-            : item
-        );
+    if (!token) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    
+    try {
+      const res = await fetch('http://localhost:5000/api/cart/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ productId: (product as any)._id || product.id, quantity: 1 })
+      });
+      if (res.ok) {
+        setCart(prev => {
+          const existing = prev.find(item => item.id === product.id);
+          if (existing) {
+            return prev.map(item => 
+              item.id === product.id 
+                ? { ...item, quantity: item.quantity + 1 } 
+                : item
+            );
+          }
+          return [...prev, { ...product, quantity: 1 }];
+        });
+        setIsCartOpen(true);
       }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-    setIsCartOpen(true);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const updateQuantity = (productId: number, amount: number) => {
-    setCart(prev => 
-      prev.map(item => {
-        if (item.id === productId) {
-          const newQty = item.quantity + amount;
-          return newQty > 0 ? { ...item, quantity: newQty } : item;
-        }
-        return item;
-      }).filter(item => item.quantity > 0)
-    );
+  const updateQuantity = async (productId: number, amount: number) => {
+    if (!token) return;
+    const item = cart.find(i => i.id === productId);
+    if (!item) return;
+    const newQty = item.quantity + amount;
+
+    try {
+      await fetch('http://localhost:5000/api/cart/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ productId, quantity: newQty })
+      });
+      setCart(prev => 
+        prev.map(item => {
+          if (item.id === productId) {
+            return newQty > 0 ? { ...item, quantity: newQty } : item;
+          }
+          return item;
+        }).filter(item => item.quantity > 0)
+      );
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart(prev => prev.filter(item => item.id !== productId));
+  const removeFromCart = async (productId: number) => {
+    if (!token) return;
+    try {
+      await fetch('http://localhost:5000/api/cart/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ productId, quantity: 0 })
+      });
+      setCart(prev => prev.filter(item => item.id !== productId));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // Apply promo logic
@@ -467,30 +577,47 @@ function App() {
   };
 
   // Checkout handling
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cart.length === 0) return;
-    setOrderCompleted(true);
-    setCart([]);
-    setIsCartOpen(false);
-    setDeliveryStep(1);
-    setIsTrackingActive(true);
+    if (!token) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    
+    try {
+      const res = await fetch('http://localhost:5000/api/orders/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ shippingAddress: { street: '123 Main', city: 'City', state: 'State', zipCode: '00000', country: 'Country' } })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // Filter products reactively
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-      const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            product.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const safeSearch = (searchQuery || '').toLowerCase();
+      const matchesSearch = (product.name || '').toLowerCase().includes(safeSearch) || 
+                            (product.description || '').toLowerCase().includes(safeSearch);
       const matchesPrice = product.price <= maxPrice;
-      const matchesRating = product.rating >= minRating;
+      const matchesRating = (product.rating || 0) >= minRating;
       const matchesStock = !onlyInStock || product.inStock;
-      const matchesBadge = selectedBadge === 'All' || product.badge === selectedBadge.toLowerCase();
+      const matchesBadge = selectedBadge === 'All' || (product.badge || '') === selectedBadge.toLowerCase();
       const matchesWishlistOnly = !showWishlistOnly || wishlist.includes(product.id);
 
       return matchesCategory && matchesSearch && matchesPrice && matchesRating && matchesStock && matchesBadge && matchesWishlistOnly;
     });
-  }, [selectedCategory, searchQuery, maxPrice, minRating, onlyInStock, selectedBadge, showWishlistOnly, wishlist]);
+  }, [products, selectedCategory, searchQuery, maxPrice, minRating, onlyInStock, selectedBadge, showWishlistOnly, wishlist]);
 
   // Totals calculations
   const subtotal = useMemo(() => {
@@ -500,6 +627,13 @@ function App() {
   const deliveryFee = subtotal > 50 || subtotal === 0 ? 0 : 4.99;
   const discountAmount = (subtotal * discountPercent) / 100;
   const total = subtotal - discountAmount + deliveryFee;
+
+  if (!token) {
+    return <LoginPage onLogin={(newToken) => {
+      setToken(newToken);
+      localStorage.setItem('token', newToken);
+    }} />;
+  }
 
   return (
     <div className="app-container">
@@ -551,6 +685,23 @@ function App() {
             {wishlist.length > 0 && <span className="badge">{wishlist.length}</span>}
           </button>
           
+          <button 
+            className="nav-btn" 
+            onClick={() => {
+              if (token) {
+                localStorage.removeItem('token');
+                setToken(null);
+                setUser(null);
+                setCart([]);
+              } else {
+                setIsAuthModalOpen(true);
+              }
+            }}
+            title={user ? "Logout" : "Login"}
+          >
+            {user ? <span style={{fontSize:'0.8rem', fontWeight:600}}>{user.name.split(' ')[0]}</span> : <Icons.User />}
+          </button>
+
           <button 
             className="nav-btn cart-btn" 
             onClick={() => setIsCartOpen(true)}
@@ -671,7 +822,7 @@ function App() {
               <button 
                 style={{ background: 'none', border: 'none', color: 'var(--accent-rose)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
                 onClick={() => {
-                  setMaxPrice(200);
+                  setMaxPrice(1000);
                   setMinRating(0);
                   setOnlyInStock(false);
                   setSelectedBadge('All');
@@ -721,7 +872,7 @@ function App() {
             <input 
               type="range" 
               min="100" 
-              max="200" 
+              max="1000" 
               step="1"
               value={maxPrice} 
               onChange={(e) => setMaxPrice(Number(e.target.value))}
@@ -1094,6 +1245,17 @@ function App() {
           </div>
         </div>
       </footer>
+      
+      {isAuthModalOpen && (
+        <AuthModal 
+          onClose={() => setIsAuthModalOpen(false)} 
+          onLogin={(token: string) => {
+            setToken(token);
+            localStorage.setItem('token', token);
+            setIsAuthModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
