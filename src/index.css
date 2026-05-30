@@ -1231,3 +1231,94 @@ body {
 .footer-bottom-links a:hover {
   color: var(--accent-secondary);
 }
+
+/* Comprehensive Mobile Responsiveness */
+@media (max-width: 768px) {
+  /* Navbar */
+  .navbar {
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem 4%;
+  }
+  .search-bar-container {
+    order: 3;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+  .nav-actions {
+    gap: 0.5rem;
+  }
+  .control-select {
+    display: none;
+  }
+  .nav-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+  
+  /* Hero Section */
+  .deals-carousel {
+    grid-template-columns: 1fr;
+  }
+  .stats-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  /* Category Section */
+  .category-card {
+    width: 90px;
+    height: 90px;
+  }
+  .category-name {
+    font-size: 0.75rem;
+  }
+  
+  /* Main Layout */
+  .sidebar-filters {
+    position: static;
+    margin-bottom: 1.5rem;
+  }
+  .main-content {
+    padding-bottom: 6rem;
+  }
+  
+  /* Products Grid */
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+  .product-card {
+    min-height: 280px;
+    padding: 1rem;
+  }
+  .product-name {
+    font-size: 0.95rem;
+  }
+  .product-desc {
+    font-size: 0.75rem;
+  }
+  .current-price {
+    font-size: 1.1rem;
+  }
+  .add-to-cart-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+  
+  /* Cart Drawer */
+  .cart-drawer {
+    width: 100%;
+  }
+  
+  /* Footer */
+  .footer-grid {
+    grid-template-columns: 1fr;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    text-align: center;
+  }
+}
