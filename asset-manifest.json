@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/grocery-delivery-app/static/css/main.158a91c9.css",
+    "main.css": "/grocery-delivery-app/static/css/main.70064180.css",
     "main.js": "/grocery-delivery-app/static/js/main.6485f2a2.js",
     "static/js/453.48d15466.chunk.js": "/grocery-delivery-app/static/js/453.48d15466.chunk.js",
     "index.html": "/grocery-delivery-app/index.html",
-    "main.158a91c9.css.map": "/grocery-delivery-app/static/css/main.158a91c9.css.map",
+    "main.70064180.css.map": "/grocery-delivery-app/static/css/main.70064180.css.map",
     "main.6485f2a2.js.map": "/grocery-delivery-app/static/js/main.6485f2a2.js.map",
     "453.48d15466.chunk.js.map": "/grocery-delivery-app/static/js/453.48d15466.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.158a91c9.css",
+    "static/css/main.70064180.css",
     "static/js/main.6485f2a2.js"
   ]
 }
