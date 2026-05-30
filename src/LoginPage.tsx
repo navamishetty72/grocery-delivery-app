@@ -12,8 +12,8 @@ const LoginPage = ({ onLogin }: { onLogin: (token: string) => void }) => {
     setError('');
     
     const url = isLogin 
-      ? 'http://localhost:5000/api/auth/login' 
-      : 'http://localhost:5000/api/auth/register';
+      ? (process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/auth/login' 
+      : (process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/auth/register';
 
     const body = isLogin ? { email, password } : { name, email, password };
 

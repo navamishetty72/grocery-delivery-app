@@ -371,7 +371,7 @@ function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/products')
+    fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/products')
       .then(res => {
         if (!res.ok) throw new Error('Backend error');
         return res.json();
@@ -400,7 +400,7 @@ function App() {
   // Fetch profile and cart if logged in
   useEffect(() => {
     if (token) {
-      fetch('http://localhost:5000/api/auth/profile', {
+      fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/auth/profile', {
         headers: { Authorization: `Bearer ${token}` }
       })
       .then(res => {
@@ -416,7 +416,7 @@ function App() {
       })
       .catch(() => setToken(null));
 
-      fetch('http://localhost:5000/api/cart', {
+      fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/cart', {
         headers: { Authorization: `Bearer ${token}` }
       })
       .then(res => {
@@ -554,7 +554,7 @@ function App() {
     }
     
     try {
-      const res = await fetch('http://localhost:5000/api/cart/add', {
+      const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/cart/add', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -588,7 +588,7 @@ function App() {
     const newQty = item.quantity + amount;
 
     try {
-      await fetch('http://localhost:5000/api/cart/update', {
+      await fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/cart/update', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -612,7 +612,7 @@ function App() {
   const removeFromCart = async (productId: number) => {
     if (!token) return;
     try {
-      await fetch('http://localhost:5000/api/cart/update', {
+      await fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/cart/update', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -648,7 +648,7 @@ function App() {
     }
     
     try {
-      const res = await fetch('http://localhost:5000/api/orders/checkout', {
+      const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/orders/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
