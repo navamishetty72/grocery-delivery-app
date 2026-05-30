@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { categories, categoryEmojis, deals } from './data/products';
+import { categories, categoryEmojis, deals, products as localProducts } from './data/products';
 import { Product, CartItem, Category } from './types';
 import AuthModal from './AuthModal';
 import LoginPage from './LoginPage';
@@ -8,6 +8,7 @@ interface IconProps {
   className?: string;
   style?: React.CSSProperties;
   fill?: string;
+  onClick?: React.MouseEventHandler<SVGSVGElement>;
 }
 
 // Inline custom SVGs for perfect type compatibility
@@ -97,8 +98,8 @@ const Icons = {
       <line x1="15" y1="9" x2="15.01" y2="9"></line>
     </svg>
   ),
-  X: ({ className, style }: IconProps) => (
-    <svg className={className} style={style} stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+  X: ({ className, style, onClick }: IconProps) => (
+    <svg className={className} style={style} onClick={onClick} stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
@@ -357,6 +358,11 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<number[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [showChatbot, setShowChatbot] = useState(false);
+  const [showHelpcenter, setShowHelpcenter] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{sender: string, text: string}[]>([{ sender: 'bot', text: 'Hi! How can I help you today?' }]);
+  const [chatInput, setChatInput] = useState('');
+  const [expandedHelp, setExpandedHelp] = useState<number | null>(null);
   
   // Auth & Backend States
   const [products, setProducts] = useState<Product[]>([]);
@@ -364,21 +370,31 @@ function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Fetch products
   useEffect(() => {
     fetch('http://localhost:5000/api/products')
-      .then(res => res.json())
-      .then(data => {
-        const mappedProducts = data.map((p: any) => ({
-          ...p,
-          id: p._id,
-          emoji: p.imageUrl,
-          inStock: p.stock > 0,
-          badge: p.stock < 10 ? 'hot' : null
-        }));
-        setProducts(mappedProducts);
+      .then(res => {
+        if (!res.ok) throw new Error('Backend error');
+        return res.json();
       })
-      .catch(err => console.error(err));
+      .then(data => {
+        if (Array.isArray(data)) {
+          const mappedProducts = data.map((p: any) => ({
+            ...p,
+            id: p._id || p.id,
+            emoji: p.imageUrl || p.emoji,
+            inStock: p.stock !== undefined ? p.stock > 0 : p.inStock,
+            badge: p.stock !== undefined ? (p.stock < 10 ? 'hot' : null) : p.badge
+          }));
+          setProducts(mappedProducts);
+        } else {
+          console.warn("Backend didn't return an array, falling back to local products.");
+          setProducts(localProducts);
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch products:", err);
+        setProducts(localProducts);
+      });
   }, []);
 
   // Fetch profile and cart if logged in
@@ -387,25 +403,41 @@ function App() {
       fetch('http://localhost:5000/api/auth/profile', {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then(res => res.json())
-      .then(data => setUser(data))
+      .then(res => {
+        if (!res.ok) throw new Error('Profile error');
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.name) {
+          setUser(data);
+        } else {
+          setToken(null);
+        }
+      })
       .catch(() => setToken(null));
 
       fetch('http://localhost:5000/api/cart', {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Cart fetch error');
+        return res.json();
+      })
       .then(data => {
-        if (data.items) {
-          setCart(data.items.map((item: any) => ({
-            ...item.product,
-            id: item.product._id,
-            emoji: item.product.imageUrl,
-            quantity: item.quantity,
-            price: item.priceAtAddition || item.product.price
-          })));
+        if (data && Array.isArray(data.items)) {
+          setCart(data.items.map((item: any) => {
+            const productInfo = item.product || {};
+            return {
+              ...productInfo,
+              id: productInfo._id || productInfo.id || item._id,
+              emoji: productInfo.imageUrl || productInfo.emoji,
+              quantity: item.quantity,
+              price: item.priceAtAddition || productInfo.price || 0
+            };
+          }));
         }
-      });
+      })
+      .catch(err => console.error("Cart error:", err));
     } else {
       setUser(null);
       setCart([]);
@@ -449,6 +481,37 @@ function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleDealClick = (dealId: number) => {
+    if (dealId === 1) {
+      setSelectedCategory('Dairy');
+    } else if (dealId === 2) {
+      setSelectedCategory('Fruits');
+      setSelectedBadge('sale');
+    } else if (dealId === 3) {
+      setSelectedCategory('All');
+    } else if (dealId === 4) {
+      setSelectedCategory('Bakery');
+    }
+    document.querySelector('.categories-section')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleSendChat = () => {
+    if (!chatInput.trim()) return;
+    const newMessages = [...chatMessages, { sender: 'user', text: chatInput }];
+    setChatMessages(newMessages);
+    setChatInput('');
+    
+    setTimeout(() => {
+      let botResponse = "I'm your QuickBot! Ask me about deliveries, refunds, or products.";
+      const lower = chatInput.toLowerCase();
+      if (lower.includes('delivery')) botResponse = "We offer 15-minute ultra-fast delivery. Free on orders above ₹50!";
+      else if (lower.includes('refund') || lower.includes('return')) botResponse = "We have a no-questions-asked refund policy. Let us know what's wrong!";
+      else if (lower.includes('hi') || lower.includes('hello')) botResponse = "Hello! Looking for any specific groceries?";
+      
+      setChatMessages([...newMessages, { sender: 'bot', text: botResponse }]);
+    }, 800);
+  };
 
   // Theme effect
   const toggleTheme = () => {
@@ -699,7 +762,7 @@ function App() {
             }}
             title={user ? "Logout" : "Login"}
           >
-            {user ? <span style={{fontSize:'0.8rem', fontWeight:600}}>{user.name.split(' ')[0]}</span> : <Icons.User />}
+            {user && user.name ? <span style={{fontSize:'0.8rem', fontWeight:600}}>{user.name.split(' ')[0]}</span> : <Icons.User />}
           </button>
 
           <button 
@@ -745,7 +808,9 @@ function App() {
             <div 
               key={deal.id} 
               className="deal-card"
+              onClick={() => handleDealClick(deal.id)}
               style={{
+                cursor: 'pointer',
                 background: `linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.7)), url(${deal.emoji}) center/cover no-repeat`,
                 borderColor: `${deal.color}40`,
                 boxShadow: `0 8px 32px rgba(0, 0, 0, 0.2)`
@@ -1255,6 +1320,106 @@ function App() {
             setIsAuthModalOpen(false);
           }}
         />
+      )}
+
+      {/* Floating Buttons */}
+      <div style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', zIndex: 1000 }}>
+        <button 
+          onClick={() => setShowHelpcenter(true)}
+          style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'var(--accent-primary)', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          title="Help Center"
+        >
+          <Icons.AlertCircle />
+        </button>
+        <button 
+          onClick={() => setShowChatbot(true)}
+          style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'var(--accent-rose)', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          title="Chatbot"
+        >
+          <Icons.Smile />
+        </button>
+      </div>
+
+      {/* Chatbot Modal */}
+      {showChatbot && (
+        <div style={{ position: 'fixed', bottom: '80px', right: '20px', width: '300px', height: '400px', background: 'var(--bg-secondary)', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', zIndex: 1001, display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+          <div style={{ padding: '15px', background: 'var(--accent-rose)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Smile /> QuickBot</h4>
+            <Icons.X style={{ cursor: 'pointer' }} onClick={() => setShowChatbot(false)} />
+          </div>
+          <div style={{ flex: 1, padding: '15px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} style={{ 
+                background: msg.sender === 'bot' ? 'var(--bg-primary)' : 'var(--accent-primary)', 
+                color: msg.sender === 'bot' ? 'var(--text-primary)' : 'white',
+                padding: '10px', 
+                borderRadius: '8px', 
+                alignSelf: msg.sender === 'bot' ? 'flex-start' : 'flex-end', 
+                maxWidth: '80%' 
+              }}>
+                {msg.text}
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '10px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '5px' }}>
+            <input 
+              type="text" 
+              placeholder="Type a message..." 
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSendChat()}
+              style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} 
+            />
+            <button onClick={handleSendChat} style={{ padding: '8px 15px', background: 'var(--accent-rose)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Send</button>
+          </div>
+        </div>
+      )}
+
+      {/* Helpcenter Modal */}
+      {showHelpcenter && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ width: '400px', background: 'var(--bg-secondary)', borderRadius: '12px', padding: '20px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0 }}>Help Center</h3>
+              <Icons.X style={{ cursor: 'pointer' }} onClick={() => setShowHelpcenter(false)} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div onClick={() => setExpandedHelp(expandedHelp === 1 ? null : 1)} style={{ padding: '15px', background: 'var(--bg-primary)', borderRadius: '8px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <h4 style={{ margin: '0 0 5px 0' }}>Track Order</h4>
+                  <span>{expandedHelp === 1 ? '-' : '+'}</span>
+                </div>
+                {expandedHelp === 1 ? (
+                  <p style={{ margin: '10px 0 0', fontSize: '0.9rem', color: 'var(--accent-primary)' }}>Your recent order is currently being packed! Check the Express Delivery Tracker for live updates.</p>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Check the status of your recent orders.</p>
+                )}
+              </div>
+              <div onClick={() => setExpandedHelp(expandedHelp === 2 ? null : 2)} style={{ padding: '15px', background: 'var(--bg-primary)', borderRadius: '8px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <h4 style={{ margin: '0 0 5px 0' }}>Refunds & Returns</h4>
+                  <span>{expandedHelp === 2 ? '-' : '+'}</span>
+                </div>
+                {expandedHelp === 2 ? (
+                  <p style={{ margin: '10px 0 0', fontSize: '0.9rem', color: 'var(--accent-primary)' }}>We offer a 100% no-questions-asked refund on damaged goods. Simply click 'Report Issue' in your order history.</p>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Learn about our return policies.</p>
+                )}
+              </div>
+              <div onClick={() => setExpandedHelp(expandedHelp === 3 ? null : 3)} style={{ padding: '15px', background: 'var(--bg-primary)', borderRadius: '8px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <h4 style={{ margin: '0 0 5px 0' }}>Contact Support</h4>
+                  <span>{expandedHelp === 3 ? '-' : '+'}</span>
+                </div>
+                {expandedHelp === 3 ? (
+                  <p style={{ margin: '10px 0 0', fontSize: '0.9rem', color: 'var(--accent-primary)' }}>Call us anytime at 000-QUICK-CART or email support@quickcart.com. We reply within 5 minutes!</p>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Call us at 000-QUICK-CART or email support@quickcart.com</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
