@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 
 const connectDB = async () => {
   try {
@@ -7,6 +6,10 @@ const connectDB = async () => {
     
     if (!mongoUri) {
       console.log('No MONGO_URI provided in env, falling back to Memory Server');
+      if (process.env.VERCEL) {
+         throw new Error("Cannot use MongoMemoryServer on Vercel. Please set MONGO_URI in Vercel Environment Variables.");
+      }
+      const { MongoMemoryServer } = require('mongodb-memory-server');
       const mongoServer = await MongoMemoryServer.create();
       mongoUri = mongoServer.getUri();
     }
